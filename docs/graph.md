@@ -192,3 +192,129 @@ ImmutableGraph<Country> countryAdjacencyGraph =
    - 你可以在同一`Builder`实例上多次调用 `immmutable()` 方法，利用相同配置，创建多个 `ImmutableGraph.Builder` 对象。
    - 你需要在 `immutable` 调用中指定元素类型。
 
+## 构建器约束与优化提示
+
+这些与图创建相关的 Builder 类型通常提供两种类型的选项：约束和优化提示。
+
+约束指定了由给定的 Builder 实例创建的图必须满足的行为和属性，例如：
+
+- 该图是否有向
+- 该图是否允许自环
+- 此图的边是否已排序
+
+实现类可以选择使用优化提示来提高效率，例如，确定内部数据结构的类型或初始大小的操作是不被保证高效的，这时可使用优化提示。每种图类型都提供与其指定 Builder 约束相对应的访问器，但不为优化提示提供访问器。
+
+## 可变图（Mutable）和不可变（Immutable）图
+
+### `Mutable*` 类型
+
+每个图类型接口都有一个对应的 `Mutable*` 子接口： [`MutableGraph`](http://google.github.io/guava/releases/snapshot/api/docs/com/google/common/graph/MutableGraph.html)、[`MutableValueGraph`](http://google.github.io/guava/releases/snapshot/api/docs/com/google/common/graph/MutableValueGraph.html) 和 [`MutableNetwork`](http://google.github.io/guava/releases/snapshot/api/docs/com/google/common/graph/MutableNetwork.html) 这些子接口定义了突变方法：
+
+- 添加和删除节点的方法：
+  - `addNode(node)` 和 `removeNode(node)`
+- 添加和删除边的方法：
+  - `MutableGraph`
+    - `putEdge(nodeU, nodeV)`
+    - `removeEdge(nodeU, nodeV)`
+  - `MutableValueGraph`
+    - `putEdgeValue(nodeU, nodeV, value)`
+    - `removeEdge(nodeU, nodeV)`
+  - `MutableNetwork`
+    - `addEdge(nodeU, nodeV, edge)`
+    - `removeEdge(edge)`
+
+这与 Java Collections Framework 和 Guava 的新 collection 类在过去的工作方式背道而驰；因为无论是 JCF 还是 Guava 的集合，都将那些公共的方法（添加/删除）抽取到上一层接口中，而这里每个 `Mutable*` 中都重复定义了相似甚至相同的方法。我们之所以这样设计，是为了鼓励防御性编程：一般来说，如果你的代码只检查或遍历一个图，不会使它发生变化，它的输入应被指定为上 Graph、ValueGraph 或 Network 而不是它们的可变型子接口。另一方面，如果你的代码确实需要更改对象，则代码必须通过使用将其自身标记为 `Mutable` 的类型来引起注意。
+
+由于 Graph 等都是接口，即使它们不包含突变方法，向调用者提供此接口的实例也不能保证调用者不会对其进行突变，因为（如果该实现类实现的是 `Mutable*`接口）调用者可以将其强制转换为 `Mutable*`类型。如果要提供即使作为方法参数或返回值被人拿到也不能修改的图，则应使用 `Immutable` 实现。
+
+### `Immutable*` 类型
+
+每种图类型接口也都有相应的`Immutable`实现。这些类是类似于 Guava 的 `ImmutableSet`、`ImmutableList`、 `ImmutableMap` 等：一旦构建，它们不能被改变，并且它们内部使用了高效的不可改变的数据结构。
+
+与其他 Guava 类型不同，`Immutable` 的实现没有任何用于突变方法的签名，因此它们无需因为尝试进行突变而抛出 `UnsupportedOperationException`。
+
+您可以通过以下两种方式之一创建 `ImmutableGraph` 等实例，使用 `GraphBuilder`：
+
+```java
+ImmutableGraph<Integer> immutableGraph1 =
+    GraphBuilder.undirected()
+        .<Country>immutable()
+        .putEdge(FRANCE, GERMANY)
+        .putEdge(FRANCE, BELGIUM)
+        .putEdge(GERMANY, BELGIUM)
+        .addNode(ICELAND)
+        .build();
+```
+
+或使用 `ImmutableGraph.copyOf()`:
+
+```java
+ImmutableGraph<Integer> immutableGraph2 = ImmutableGraph.copyOf(otherGraph);
+```
+
+#### 保证
+
+每种 `Immutable*` 类型均提供以下保证：
+
+- **浅层不变性**：永远不能添加，删除或替换元素
+- **确定性迭代**：迭代顺序始终与输入图的顺序相同
+- [**线程安全**](https://github.com/google/guava/wiki/GraphsExplained#synchronization)：可以安全地从多个线程同时访问该图
+- **完整性**：此类型不能在此包的外部被子类化（不然上面的保证不能成立）
+
+#### 将这些类视为接口，而不是实现
+
+每个 `Immutable*` 类都是提供有意义的行为保证的类，而不仅仅是一个特定的实现。所以将它们视为接口，尽管它们被定义成类，而且还是抽象类（奇怪的很）。
+
+存储 `Immutable*` 实例（例如 `ImmutableGraph`）的字段和方法返回值应声明为 `Immutable*` 类型，而不是相应的接口类型（例如 `Graph`）。这会向调用者传达上面列出的所有语义保证。
+
+另一方面，参数类型 `ImmutableGraph` 通常对调用者不利。应当接受 `Graph`。
+
+**警告**：正如 [其他地方](https://github.com/google/guava/wiki/GraphsExplained#elements-and-mutable-state) 所述，修改一个已经放进集合中的元素是不明智的（因为那会影响它的 `equals()` 行为），这将导致未知的行为和 bug。最好完全避免将可变对象用作 `Immutable*` 实例的属性，因为用户可能希望你的不可变对象具有深度不变性。
+
+## 图的节点和边
+
+### 元素必须可用作 Map 的键
+
+用户提供的图元素应被视为由图实现维护的内部数据结构的键。因此，用于表示图元素的类必须提供 `equals()` 和 `hashCode()` 实现，这些实现应具有或引入以下属性。
+
+#### 唯一性
+
+如果 `A` 和 `B` 满足：`A.equals(B) == true` 则两者中的最多一个可能是图的元素。
+
+#### 与 `equals()` 和 `hashCode()` 的一致性
+
+`hashCode()` 必须与 `equals()` 定义的 一致（见 [`Object.hashCode()`](https://docs.oracle.com/javase/8/docs/api/java/lang/Object.html#hashCode--)）。
+
+#### 与 `equals()` 的顺序一致性
+
+如果节点被排序（例如，通过 `GraphBuilder.orderNodes()`），排序必须与 `equals()` 一致，通过所定义的 [`Comparator`](https://docs.oracle.com/javase/8/docs/api/java/util/Comparator.html)和 [`Comparable`](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html)。 
+
+#### 非递归性
+
+`hashCode` 且 `equals()` 不得递归引用其他元素，如下面例子所示： 
+
+```java
+// DON'T use a class like this as a graph element (or Map key/Set element)
+public final class Node<T> {
+  T value;
+  Set<Node<T>> successors;
+
+  public boolean equals(Object o) {
+    Node<T> other = (Node<T>) o;
+    return Objects.equals(value, other.value)
+        && Objects.equals(successors, other.successors);
+  }
+
+  public int hashCode() {
+    return Objects.hash(value, successors);
+  }
+}
+```
+
+使用此类作为 `common.graph` 元素类型（例如 `Graph>` ）存在以下问题：
+
+- **冗余**：库 `Graph` 提供的实现 `common.graph` 已经存储了这些关系
+- **效率低下**：添加/访问此类元素调用 `equals()`（可能是 `hashCode()`），这需要 O（n）时间
+- **不可行性**：如果有在图中的循环，`equals()` 和 `hashCode()`可能永远不会终止
+
+相反，仅将 `T` 值本身用作节点类型（假设 `T` 值本身是有效 `Map` 键）。
