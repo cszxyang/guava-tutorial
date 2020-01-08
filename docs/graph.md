@@ -7,8 +7,6 @@
 
 <div align="center"><img src="./assets/graph-wiki.png"></img></div>
 
-<
-
 看下下面的例子
 
 ```java
@@ -185,7 +183,7 @@ ImmutableGraph<Country> countryAdjacencyGraph =
  
    - 你可以在同一 `Builder` 实例上多次调用 `build()` 方法，以使用相同的配置构建多个图形实例。
    - 你无需在 `Builder` 实例上指定元素类型。在图类型上指定即可。
-   - 该 `build()` 方法返回 `Mutable` 相关图类型的子类，该子类提供了变异方法，有关更多信息，请参见 [“ `Mutable`和`Immutable`图形”](https://github.com/google/guava/wiki/GraphsExplained#mutable-and-immutable-graphs)。
+   - 该 `build()` 方法返回 `Mutable` 相关图类型的子接口，该子接口提供了变异方法，有关更多信息，请参见 [“ `Mutable`和`Immutable`图形”](https://github.com/google/guava/wiki/GraphsExplained#mutable-and-immutable-graphs)。
  
  - 建立不可变图
  
