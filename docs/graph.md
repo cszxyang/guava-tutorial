@@ -316,3 +316,113 @@ public final class Node<T> {
 - **不可行性**：如果有在图中的循环，`equals()` 和 `hashCode()`可能永远不会终止
 
 相反，仅将 `T` 值本身用作节点类型（假设 `T` 值本身是有效 `Map` 键）。
+
+## 代码示例
+
+### 判断节点是否在图中
+
+```java
+graph.nodes().contains(node);
+```
+
+### 判断图中节点 `u` 与之间 `v` 之间是否存在边缘？
+
+```java
+// This is the preferred syntax since 23.0 for all graph types.
+graphs.hasEdgeConnecting(u, v);
+
+// These are equivalent (to each other and to the above expression).
+graph.successors(u).contains(v);
+graph.predecessors(v).contains(u);
+
+// This is equivalent to the expressions above if the graph is undirected.
+graph.adjacentNodes(u).contains(v);
+
+// This works only for Networks.
+!network.edgesConnecting(u, v).isEmpty();
+
+// This works only if "network" has at most a single edge connecting u to v.
+network.edgeConnecting(u, v).isPresent();  // Java 8 only
+network.edgeConnectingOrNull(u, v) != null;
+
+// These work only for ValueGraphs.
+valueGraph.edgeValue(u, v).isPresent();  // Java 8 only
+valueGraph.edgeValueOrDefault(u, v, null) != null;
+```
+
+### `Graph` 基本使用示例
+
+```java
+ImmutableGraph<Integer> graph =
+    GraphBuilder.directed()
+        .<Integer>immutable()
+        .addNode(1)
+        .putEdge(2, 3) // also adds nodes 2 and 3 if not already present
+        .putEdge(2, 3) // no effect; Graph does not support parallel edges
+        .build();
+
+Set<Integer> successorsOfTwo = graph.successors(2); // returns {3}
+```
+
+### `ValueGraph` 基本使用示例
+
+```java
+MutableValueGraph<Integer, Double> weightedGraph = ValueGraphBuilder.directed().build();
+weightedGraph.addNode(1);
+weightedGraph.putEdgeValue(2, 3, 1.5);  // also adds nodes 2 and 3 if not already present
+weightedGraph.putEdgeValue(3, 5, 1.5);  // edge values (like Map values) need not be unique
+...
+weightedGraph.putEdgeValue(2, 3, 2.0);  // updates the value for (2,3) to 2.0
+```
+
+### `Network` 基本使用示例
+
+```java
+MutableNetwork<Integer, String> network = NetworkBuilder.directed().build();
+network.addNode(1);
+network.addEdge("2->3", 2, 3);  // also adds nodes 2 and 3 if not already present
+
+Set<Integer> successorsOfTwo = network.successors(2);  // returns {3}
+Set<String> outEdgesOfTwo = network.outEdges(2);   // returns {"2->3"}
+
+network.addEdge("2->3 too", 2, 3);  // throws; Network disallows parallel edges
+                                    // by default
+network.addEdge("2->3", 2, 3);  // no effect; this edge is already present
+                                // and connecting these nodes in this order
+
+Set<String> inEdgesOfFour = network.inEdges(4); // throws; node not in graph
+```
+
+### 遍历无向图节点
+
+```java
+// Return all nodes reachable by traversing 2 edges starting from "node"
+// (ignoring edge direction and edge weights, if any, and not including "node").
+Set<N> getTwoHopNeighbors(Graph<N> graph, N node) {
+  Set<N> twoHopNeighbors = new HashSet<>();
+  for (N neighbor : graph.adjacentNodes(node)) {
+    twoHopNeighbors.addAll(graph.adjacentNodes(neighbor));
+  }
+  twoHopNeighbors.remove(node);
+  return twoHopNeighbors;
+}
+```
+
+### 遍历有向图节点
+
+```java
+// Update the shortest-path weighted distances of the successors to "node"
+// in a directed Network (inner loop of Dijkstra's algorithm)
+// given a known distance for {@code node} stored in a {@code Map<N, Double>},
+// and a {@code Function<E, Double>} for retrieving a weight for an edge.
+void updateDistancesFrom(Network<N, E> network, N node) {
+  double nodeDistance = distances.get(node);
+  for (E outEdge : network.outEdges(node)) {
+    N target = network.target(outEdge);
+    double targetDistance = nodeDistance + edgeWeights.apply(outEdge);
+    if (targetDistance < distances.getOrDefault(target, Double.MAX_VALUE)) {
+      distances.put(target, targetDistance);
+    }
+  }
+}
+```
